@@ -93,93 +93,82 @@ int main(int argc, char *argv[]) {
 	
 	freeaddrinfo(serverInfo);
 	
-	printf("waiting for request from client...\n");
-	
-	addressLength = sizeof clientInfo;
-	sizeInBytes = recvfrom(sockFileDesc, buf, MAXBUFLEN-1, 0,
-		(struct sockaddr *)&clientInfo, &addressLength);
-	if (sizeInBytes == -1) {
-		perror("error receiving");
-		exit(1);
-	}
-	
-	printf("packet is %d bytes long\n", sizeInBytes);
-	buf[sizeInBytes] = '\0';
-	printf("listener: packet contains ");
-	int j;
-	for(j = 0; j < strlen(buf); j++) {
-		printf("%d, ", (int)buf[j]);
-	}
-	printf("\n");
-	
-	memcpy(&request.msgLength, buf + 0, 1);
-	memcpy(&request.requestID, buf + 1, 1);
-	memcpy(&request.opCode, buf + 2, 1);
-	memcpy(&request.numOperands, buf + 3, 1);
-	memcpy(&request.op1, buf + 4, 2);
-	
-	if ((int)request.msgLength > 6) {
-		memcpy(&request.op2, buf + 6, 2);
-	}
-	
-	request.op1 = ntohs(request.op1);
-	request.op2 = ntohs(request.op2);
-	
-	memset(&response, 0, sizeof response);
-	response.msgLength = 0x07;
-	response.requestID = request.requestID;
-	response.errorCode = 0x00;
-	switch(request.opCode) {
-		case 0x00:
-			response.result = request.op1 + request.op2;
-			break;
-		case 0x01:
-			response.result = request.op1 - request.op2;
-			break;
-		case 0x02:
-			response.result = request.op1 | request.op2;
-			break;
-		case 0x03:
-			response.result = request.op1 & request.op2;
-			break;
-		case 0x04:
-			response.result = request.op1 >> request.op2;
-			break;
-		case 0x05:
-			response.result = request.op1 << request.op2;
-			break;
-		case 0x06:
-			response.result = ~request.op1;
-			break;
-		default:
+	while(1) {
+		printf("waiting for request from client...\n");
+		
+		addressLength = sizeof clientInfo;
+		sizeInBytes = recvfrom(sockFileDesc, buf, MAXBUFLEN-1, 0,
+			(struct sockaddr *)&clientInfo, &addressLength);
+		if (sizeInBytes == -1) {
+			perror("error receiving");
+			exit(1);
+		}
+		
+		printf("packet is %d bytes long\n", sizeInBytes);
+		buf[sizeInBytes] = '\0';
+		
+		memcpy(&request.msgLength, buf + 0, 1);
+		memcpy(&request.requestID, buf + 1, 1);
+		memcpy(&request.opCode, buf + 2, 1);
+		memcpy(&request.numOperands, buf + 3, 1);
+		memcpy(&request.op1, buf + 4, 2);
+		
+		if ((int)request.msgLength == 8) {
+			memcpy(&request.op2, buf + 6, 2);
+		}
+		
+		request.op1 = ntohs(request.op1);
+		request.op2 = ntohs(request.op2);
+		
+		memset(&response, 0, sizeof response);
+		response.msgLength = 0x07;
+		response.requestID = request.requestID;
+		if (sizeInBytes != request.msgLength) {
 			response.errorCode = (char)127;
-	}
-	
-	response.result = htonl(response.result);
-	
-	memcpy(responseAsArray + 0, &response.msgLength, 1);
-	memcpy(responseAsArray + 1, &response.requestID, 1);
-	memcpy(responseAsArray + 2, &response.errorCode, 1);
-	memcpy(responseAsArray + 3, &response.result, 4);
-	
-	/* printf("response message length: %d\n", response.msgLength);
-	printf("response requestID: %d\n", response.requestID);
-	printf("response error code: %d\n", response.errorCode);
-	printf("request operand 1: %d\n", request.op1);
-	printf("request operand 2: %d\n", request.op2);
-	printf("response response: %d\n", response.result); */
-	
-	/* int i;
-	for (i = 0; i < 7; i++) {
-		printf("%d\n", (int)responseAsArray[i]);
-	} */
-	
-	sizeInBytes = sendto(sockFileDesc, responseAsArray, 
-		response.msgLength, 0, (struct sockaddr *)&clientInfo,
-		addressLength);
-	if (sizeInBytes == -1) {
-		perror("error sending\n");
-		exit(1);
+		}
+		else {
+			response.errorCode = (char)0;
+		}
+		switch(request.opCode) {
+			case 0x00:
+				response.result = request.op1 + request.op2;
+				break;
+			case 0x01:
+				response.result = request.op1 - request.op2;
+				break;
+			case 0x02:
+				response.result = request.op1 | request.op2;
+				break;
+			case 0x03:
+				response.result = request.op1 & request.op2;
+				break;
+			case 0x04:
+				response.result = request.op1 >> request.op2;
+				break;
+			case 0x05:
+				response.result = request.op1 << request.op2;
+				break;
+			case 0x06:
+				response.result = ~request.op1;
+				break;
+			default:
+				response.errorCode = (char)127;
+		}
+		
+		response.result = htonl(response.result);
+		
+		memcpy(responseAsArray + 0, &response.msgLength, 1);
+		memcpy(responseAsArray + 1, &response.requestID, 1);
+		memcpy(responseAsArray + 2, &response.errorCode, 1);
+		memcpy(responseAsArray + 3, &response.result, 4);
+		
+		sizeInBytes = sendto(sockFileDesc, responseAsArray, 
+			response.msgLength, 0, (struct sockaddr *)&clientInfo,
+			addressLength);
+		if (sizeInBytes == -1) {
+			perror("error sending\n");
+			exit(1);
+		}
 	}
 	
 	close(sockFileDesc);
