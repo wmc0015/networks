@@ -1,5 +1,6 @@
 /*
-** client.c -- a stream socket client demo
+** TCP client
+** Author: Alexander King
 */
 
 #include <stdio.h>
@@ -11,12 +12,27 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
-
 #include <arpa/inet.h>
 
-#define PORT "10010" // the port client will be connecting to
-
 #define MAXDATASIZE 100 // max number of bytes we can get at once
+
+// packet sent to server
+struct Request {
+	unsigned char tml; // total message length
+	unsigned char rid; // request id
+	unsigned char opcode; // operation code
+	unsigned char num_operands; // number of operands
+	short op1; // operand 1
+	short op2; // operand 2
+} __attribute__((__packed__));
+
+// packet received from server
+struct Response {
+	unsigned char tml;
+	unsigned char rid;
+	unsigned char error_code;
+	int response;
+} __attribute__((__packed__));
 
 // get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa)
@@ -38,30 +54,10 @@ int main(int argc, char *argv[])
 	int opcode;
 	int op1;
 	int op2;
-
- 	struct PacketOut
-	{
-		unsigned int tml: 8; // total message length
-		unsigned int rid: 8; // request id
-		unsigned int opcode: 8; // operation code
-		unsigned int num_operands: 8; // number of operands
-		signed int op1: 16; // operand 1
-		signed int op2: 16; // operand 2
-	} __attribute__((__packed__));
-
-	struct PacketIn
-	{
-		unsigned int tml: 8; // total message length
-		unsigned int rid: 8; // request id
-		unsigned int error_code: 8; // error code
-		unsigned int response: 32; // response
-	} __attribute__((__packed__));
-
-	typedef struct PacketOut PacketOut;
-	typedef struct PacketIn  PacketIn;
+	struct timeval start, end;
 
 	if (argc != 3) {
-	    fprintf(stderr,"usage: client hostname PortNumber \n");
+	    fprintf(stderr,"usage: client <hostname> <PortNumber> \n");
 	    exit(1);
 	}
 
@@ -69,7 +65,7 @@ int main(int argc, char *argv[])
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 
-	if ((rv = getaddrinfo(argv[1], PORT, &hints, &servinfo)) != 0) {
+	if ((rv = getaddrinfo(argv[1], argv[2], &hints, &servinfo)) != 0) {
 		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
 		return 1;
 	}
@@ -102,51 +98,56 @@ int main(int argc, char *argv[])
 
 	freeaddrinfo(servinfo); // all done with this structure
 
-	printf("Enter an operation code: ");
-	scanf("%d", &opcode);
-	printf("Enter operand 1: ");
-	scanf("%d", &op1);
+	// send the message
+	while(1) {
+		struct Request request;
+		int opcode, op1, op2;
+		printf("Enter an operation code (0-6 or -1 to quit): ");
+		scanf("%d", &opcode);
 
-	PacketOut *packet = malloc(sizeof(PacketOut));
+		if (opcode == -1)	{
+			printf("Shutting down...\n");
+			exit(0);
+		}
 
-	if (opcode != 6)	{ // only unary operation
-		printf("Enter operand 2: ");
-		scanf("%d", &op2);
-		packet->tml = 8;
-		packet->num_operands = 2;
-		packet->op2 = htons(op2);
+		printf("Enter operand 1: ");
+		scanf("%d", &op1);
+
+		// binary operation
+		if (opcode != 6) {
+			printf("Enter operand 2: ");
+			scanf("%d", &op2);
+
+			request.op2 = htons(op2);
+			request.num_operands = 2;
+		}
+		else {
+			request.num_operands = 1;
+		}
+
+		request.op1 = htons(op1);
+		request.opcode = opcode;
+		request.rid = rand();
+		request.tml = sizeof(request);
+
+		gettimeofday(&start, NULL);
+		send(sockfd, &request, request.tml, 0);
+
+		// receive the response
+		struct Response response;
+		recv(sockfd, &response, MAXDATASIZE-1, 0);
+		gettimeofday(&end, NULL);
+
+		int result = ntohl(response.response);
+
+		suseconds_t elapsed_time = (end.tv_usec - start.tv_usec);
+
+
+		printf("Request ID: %d\n", response.rid);
+		printf("Response: %d\n", result);
+		printf("Elapsed Time: %d microseconds\n", elapsed_time); // convert to miliseconds from microseconds
+
 	}
-	else {
-		packet->tml = 6;
-		packet->num_operands = 1;
-	}
-
-	packet->op1 = htons(op1);
-	packet->rid = rand() % 257;
-	packet->opcode = opcode;
-
-	if ((send(sockfd, packet, packet->tml, 0)) == -1)	{
-		perror("send");
-	}
-	else {
-		printf("Packet sent: %X %X %X %X %X %X\n", packet->tml, packet->rid, packet->opcode, packet->num_operands, packet->op1, packet->op2);
-	}
-
-	PacketIn *packet_in = malloc(sizeof(PacketIn));
-
-
-
-	if ((numbytes = recv(sockfd, packet_in, MAXDATASIZE-1, 0)) == -1) {
-	    perror("recv");
-	    exit(1);
-	}
-	else {
-		printf("Packet received!\n");
-	}
-
-	buf[numbytes] = '\0';
-
-	printf("client: received '%d %d %d %d'\n", packet_in->tml, packet_in->rid, packet_in->error_code, packet_in->response);
 
 	close(sockfd);
 
