@@ -23,19 +23,20 @@ print 'Connection address: ', addr
 
 while True:
 
-	data = conn.recv(1024)
+	data = conn.recv(1024).strip()
 
 	print "received data: ", data
 
 	(total_message_length) = struct.unpack('!b', data[:1])
 
-	if (total_message_length != len(data)):
-		error_code = 127
-		result = 0
-		response = struct.pack('!bbbi', ord(chr(7)), 0, ord(chr(error_code)), result)
-		conn.send(response)
-		conn.close()
-		continue
+	# if (total_message_length != len(data)):
+	# 	error_code = 127
+	# 	result = 0
+	# 	response = struct.pack('!bbbi', ord(chr(7)), 0, ord(chr(error_code)), result)
+	# 	print "failing here"
+	# 	conn.send(response)
+	# 	conn.close()
+	# 	continue
 
 	(total_message_length, request_identification, op_code, number_of_operands, operand_one) = struct.unpack('!bbbbh', data[:6])
 
@@ -53,19 +54,19 @@ while True:
 	error_code = 0
 	result = 0
 
-	if (op_code == 0x00):
+	if (op_code == 0):
 		result = operand_one + operand_two
-	elif (op_code == 0x01):
+	elif (op_code == 1):
 		result = operand_one - operand_two
-	elif (op_code == 0x02):
+	elif (op_code == 2):
 		result = operand_one | operand_two
-	elif (op_code == 0x03):
+	elif (op_code == 3):
 		result = operand_one & operand_two
-	elif (op_code == 0x04):
+	elif (op_code == 4):
 		result = operand_one >> operand_two
-	elif (op_code == 0x05):
+	elif (op_code == 5):
 		result = operand_one << operand_two
-	elif (op_code == 0x06):
+	elif (op_code == 6):
 		result = ~operand_one
 	else:
 		error_code = 127
