@@ -25,18 +25,14 @@ while True:
 
 	data = conn.recv(1024).strip()
 
-	print "received data: ", data
+	(total_message_length,) = struct.unpack('!b', data[:1])
 
-	(total_message_length) = struct.unpack('!b', data[:1])
-
-	# if (total_message_length != len(data)):
-	# 	error_code = 127
-	# 	result = 0
-	# 	response = struct.pack('!bbbi', ord(chr(7)), 0, ord(chr(error_code)), result)
-	# 	print "failing here"
-	# 	conn.send(response)
-	# 	conn.close()
-	# 	continue
+	if (total_message_length != len(data)):
+		error_code = 127
+	 	result = 0
+	 	response = struct.pack('!bbbi', ord(chr(7)), 0, ord(chr(error_code)), result)
+	 	conn.send(response)
+		continue
 
 	(total_message_length, request_identification, op_code, number_of_operands, operand_one) = struct.unpack('!bbbbh', data[:6])
 

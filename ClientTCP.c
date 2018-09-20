@@ -120,15 +120,16 @@ int main(int argc, char *argv[])
 
 			request.op2 = htons(op2);
 			request.num_operands = 2;
+			request.tml = 8;
 		}
 		else {
 			request.num_operands = 1;
+			request.tml = 6;
 		}
 
 		request.op1 = htons(op1);
 		request.opcode = opcode;
 		request.rid = rand();
-		request.tml = sizeof(request);
 
 		gettimeofday(&start, NULL);
 		send(sockfd, &request, request.tml, 0);
@@ -138,15 +139,28 @@ int main(int argc, char *argv[])
 		recv(sockfd, &response, MAXDATASIZE-1, 0);
 		gettimeofday(&end, NULL);
 
+		memcpy(buf, &response, response.tml);
+		printf("Received: ");
+		int i;
+		for (i = 0; i < response.tml; i++) {
+			printf("0x%x ", buf[i]);
+		}
+		printf("\n");
+		
 		int result = ntohl(response.response);
 
 		suseconds_t elapsed_time = (end.tv_usec - start.tv_usec);
 
-
-		printf("Request ID: %d\n", response.rid);
-		printf("Response: %d\n", result);
-		printf("Elapsed Time: %d microseconds\n", elapsed_time); // convert to miliseconds from microseconds
-
+		if (response.error_code == 127) {
+			printf("Request ID: %d\n", response.rid);
+			printf("\tERROR: Invalid request\n");
+			printf("Elapsed Time: %d microseconds\n", elapsed_time);
+		}
+		else {
+			printf("Request ID: %d\n", response.rid);
+			printf("Response: %d\n", result);
+			printf("Elapsed Time: %d microseconds\n", elapsed_time); // convert to miliseconds from microseconds
+		}
 	}
 
 	close(sockfd);
