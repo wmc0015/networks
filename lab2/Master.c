@@ -14,8 +14,9 @@
 #define BACKLOG 10
 #define MAX_IP_SIZE 15
 #define MAX_DATA_SIZE 100
+#define MAGIC_NUMBER 1248819489
 
-struct request {
+struct Message {
 	char groupID;
 	int magicNum;
 	char timeToLive;
@@ -23,6 +24,18 @@ struct request {
 	char ridSource;
 	char[64] message;
 	char checksum;
+};
+
+struct JoinRequest {
+	char groupID;
+	int magicNum;
+};
+
+struct JoinResponse {
+	char groupID;
+	int magicNum;
+	char yourRID;
+	char[4] nextSlaveIP;
 };
 
 void sigchld_handler(int s)
@@ -59,10 +72,11 @@ int main(void) {
 	char port[5];
 
 	// LAB VARIABLES
-	int nextRID;
+	char nextRID;
 	char[MAX_IP_SIZE] nextSlaveIP;
 	int nextSlaveID;
-	struct request requestToJoin;
+	struct JoinRequest request;
+	struct JoinResponse response;
 	
 	if (argc != 2) {
 		// report missing port
@@ -156,6 +170,50 @@ int main(void) {
 
 		buf[numbytes] = '\0';
 
-		//memset to convert char[] to struct request
+		if (numbytes != 5) {
+			printf("master: received request of invalid size.")
+			continue;
+		} else {
+			stringToRequest(buf, request);
+		}
+
+		if (request.magicNum != MAGIC_NUMBER) {
+			printf("master: received request with invalid magic number.");
+			continue;
+		}
+
+		//build response
+		response.groupID = (char)7;
+		response.magicNum = MAGIC_NUMBER;
+		response.yourRID = getNextRID();
+		response.nextSlaveIP = nextSlaveIP;
+
+		//save this slave's IP as my master's next slave IP
+		struct sockaddr_in temp = (struct sockaddr_in *)&their_addr;
+		memcpy(nextSlaveIP, &temp->sin_addr.s_addr, 4);
+		memset(&temp, 0, sizeof temp);
+
+		//send response back to requester
 	}
+}
+
+void stringToMessage(char str[], struct Message message, int numBytes) {
+	int msgLength = numBytes - 9;
+
+	memcpy(&message.groupID, str + 0, 1);
+	memcpy(&message.magicNum, str + 1, 4);
+	memcpy(&message.timeToLive, str + 5, 1);
+	memcpy(&message.ridDest, str + 6, 1);
+	memcpy(&message.ridSource, str + 7, 1);
+	memcpy(&message.message, str + 7, msgLength);
+	memcpy(&message.checksum, str + numBytes - 1, 1);
+}
+
+void stringToRequest(char str[], struct JoinRequest request) {
+	memcpy(&request.groupID, str + 0, 1);
+	memcpy(&request.magicNum, str + 1, 4);
+}
+
+char getNextRID() {
+	return nextRID++;
 }
