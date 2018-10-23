@@ -15,6 +15,7 @@
 #define MAX_IP_SIZE 15
 #define MAX_DATA_SIZE 100
 #define MAGIC_NUMBER 1248819489
+#define MAX_BUF_LEN 75
 
 struct Message {
 	char groupID;
@@ -22,7 +23,7 @@ struct Message {
 	char timeToLive;
 	char ridDest;
 	char ridSource;
-	char[64] message;
+	char message[64];
 	char checksum;
 };
 
@@ -35,8 +36,18 @@ struct JoinResponse {
 	char groupID;
 	int magicNum;
 	char yourRID;
-	char[4] nextSlaveIP;
+	int nextSlaveIP;
 };
+
+// MY FUNCTION DEFINITIONS
+
+void stringToMessage(char str[], struct Message message, int numBytes);
+
+void stringToRequest(char str[], struct JoinRequest request);
+
+void responseToString(char str[], struct JoinResponse response);
+
+// BEEJ'S HELPER FUNCTIONS
 
 void sigchld_handler(int s)
 {
@@ -58,11 +69,12 @@ void *get_in_addr(struct sockaddr *sa)
 	return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-int main(void) {
+int main(int argc, char *argv[]) {
 	// SOCKET VARIABLES
 	int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
-	struct addrinfo hints, *servinfo, *p;
+	struct addrinfo hints, *addr_info, *servinfo, *p;
 	struct sockaddr_storage their_addr; // connector's address information
+	struct sockaddr my_addr;
 	socklen_t sin_size;
 	struct sigaction sa;
 	int yes=1;
@@ -70,10 +82,14 @@ int main(void) {
 	int rv;
 	int portAsInt;
 	char port[5];
+	char myName[1024];
+	int myIPAsInt;
+	char buf[MAX_BUF_LEN];
+	int numBytes;
 
 	// LAB VARIABLES
-	char nextRID;
-	char[MAX_IP_SIZE] nextSlaveIP;
+	char nextRID=1;
+	int nextSlaveIP;
 	int nextSlaveID;
 	struct JoinRequest request;
 	struct JoinResponse response;
@@ -97,7 +113,7 @@ int main(void) {
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
 	
-	if ((rv = getaddrinfo(NULL, PORT, &hints, &servinfo)) != 0) {
+	if ((rv = getaddrinfo(NULL, port, &hints, &servinfo)) != 0) {
 		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
 		return 1;
 	}
@@ -145,6 +161,14 @@ int main(void) {
 		exit(1);
 	}
 
+	gethostname(myName, 1024);
+	getaddrinfo(myName, port, NULL, &addr_info);
+	my_addr = *(addr_info->ai_addr);
+
+	myIPAsInt = ((struct sockaddr_in*)&my_addr)->sin_addr.s_addr;
+	nextSlaveIP = myIPAsInt;
+	printf("master IP: %X\n", htonl(myIPAsInt));	
+
 	printf("master: waiting for connections...\n");
 
 	// receive request
@@ -163,37 +187,73 @@ int main(void) {
 		printf("master: got connection from %s\n", s);
 
 		// if problems, fork
-		if ((numbytes = recv(sockfd, buf, MAX_DATA_SIZE-1, 0)) == -1) {
+		if ((numBytes = recv(new_fd, buf, MAX_DATA_SIZE-1, 0)) == -1) {
 	    	perror("recv");
 	   		exit(1);
 		}
 
-		buf[numbytes] = '\0';
+		buf[numBytes] = '\0';
 
-		if (numbytes != 5) {
-			printf("master: received request of invalid size.")
+		printf("received: ");
+		int i = 0;
+		while(buf[i] != '\0') {
+			printf("%x ", buf[i++]);
+		}
+		printf("\n");
+
+		if (numBytes != 5) {
+			printf("master: received request of invalid size.\n");
+			close(new_fd);
 			continue;
 		} else {
-			stringToRequest(buf, request);
+			//stringToRequest(buf, request);
+			printf("numBytes == 5\n");
+			memcpy(&request.groupID, buf + 0, 1);
+			printf("copied GID\n");
+			memcpy(&request.magicNum, buf + 1, 4);
+			printf("copied magic num\n");			
+			printf("gid: %c\n", request.groupID);
+			printf("magic num: %d\n", request.magicNum);
 		}
 
+		request.magicNum = ntohl(request.magicNum);
+
 		if (request.magicNum != MAGIC_NUMBER) {
-			printf("master: received request with invalid magic number.");
+			printf("master: received request with invalid magic number.\n");
+			close(new_fd);
 			continue;
 		}
 
 		//build response
 		response.groupID = (char)7;
 		response.magicNum = MAGIC_NUMBER;
-		response.yourRID = getNextRID();
+		response.yourRID = nextRID++;
 		response.nextSlaveIP = nextSlaveIP;
 
+		printf("response IP address: %x\n", response.nextSlaveIP);
+
 		//save this slave's IP as my master's next slave IP
-		struct sockaddr_in temp = (struct sockaddr_in *)&their_addr;
-		memcpy(nextSlaveIP, &temp->sin_addr.s_addr, 4);
+		struct sockaddr_in *temp = (struct sockaddr_in *)&their_addr;
+		//memcpy(nextSlaveIP, &temp->sin_addr.s_addr, 4);
+		nextSlaveIP = temp->sin_addr.s_addr;
 		memset(&temp, 0, sizeof temp);
 
 		//send response back to requester
+		memset(buf, 0, MAX_BUF_LEN);
+		responseToString(&buf[0], response);
+		buf[10] = '\0';
+
+		printf("sending: ");
+		i = 0;
+		while(buf[i] != '\0') {
+			printf("%x ", buf[i++]);
+		}
+		printf("\n");
+
+		if (send(new_fd, buf, 10, 0) == -1) {
+			perror("send");
+		}
+		close(new_fd);
 	}
 }
 
@@ -214,6 +274,12 @@ void stringToRequest(char str[], struct JoinRequest request) {
 	memcpy(&request.magicNum, str + 1, 4);
 }
 
-char getNextRID() {
-	return nextRID++;
+void responseToString(char *str, struct JoinResponse response) {
+	response.magicNum = htonl(response.magicNum);
+	printf("response.nextSlaveIP: %x\n", htonl(response.nextSlaveIP));
+	response.groupID = 7;
+	memcpy(str + 0, &response.groupID, 1);
+	memcpy(str + 1, &response.magicNum, 4);
+	memcpy(str + 5, &response.yourRID, 1);
+	memcpy(str + 6, &response.nextSlaveIP, 4);
 }
