@@ -22,15 +22,9 @@ sock.send(joinRequest)
 response = sock.recv(75)
 
 (groupID, magicNum, yourRID, nextSlaveIP1, nextSlaveIP2, nextSlaveIP3, nextSlaveIP4) = struct.unpack('!BiBBBBB', response)
-(groupID, magicNum, yourRID, nextSlaveIPasInt) = struct.unpack('!BiBI', response)
-
-nextSlaveIPasInt = socket.ntohl(nextSlaveIPasInt)
-
-print("%x" %nextSlaveIPasInt)
 
 nextSlaveIP = str(nextSlaveIP1) + '.' + str(nextSlaveIP2) + '.' + str(nextSlaveIP3) + '.' + str(nextSlaveIP4)
 
 print("GroupID: %d" %groupID)
-print("Magic Num: %d" %magicNum)
 print("Your RID: %d" %yourRID)
 print("Next IP: %s" %nextSlaveIP)

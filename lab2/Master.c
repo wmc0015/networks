@@ -167,9 +167,8 @@ int main(int argc, char *argv[]) {
 
 	myIPAsInt = ((struct sockaddr_in*)&my_addr)->sin_addr.s_addr;
 	nextSlaveIP = myIPAsInt;
-	printf("master IP: %X\n", htonl(myIPAsInt));	
 
-	printf("master: waiting for connections...\n");
+	printf("master: waiting for connections....\n");
 
 	// receive request
 
@@ -194,12 +193,12 @@ int main(int argc, char *argv[]) {
 
 		buf[numBytes] = '\0';
 
-		printf("received: ");
+		/*printf("received: ");
 		int i = 0;
 		while(buf[i] != '\0') {
 			printf("%x ", buf[i++]);
 		}
-		printf("\n");
+		printf("\n");*/
 
 		if (numBytes != 5) {
 			printf("master: received request of invalid size.\n");
@@ -207,13 +206,8 @@ int main(int argc, char *argv[]) {
 			continue;
 		} else {
 			//stringToRequest(buf, request);
-			printf("numBytes == 5\n");
 			memcpy(&request.groupID, buf + 0, 1);
-			printf("copied GID\n");
 			memcpy(&request.magicNum, buf + 1, 4);
-			printf("copied magic num\n");			
-			printf("gid: %c\n", request.groupID);
-			printf("magic num: %d\n", request.magicNum);
 		}
 
 		request.magicNum = ntohl(request.magicNum);
@@ -230,8 +224,6 @@ int main(int argc, char *argv[]) {
 		response.yourRID = nextRID++;
 		response.nextSlaveIP = nextSlaveIP;
 
-		printf("response IP address: %x\n", response.nextSlaveIP);
-
 		//save this slave's IP as my master's next slave IP
 		struct sockaddr_in *temp = (struct sockaddr_in *)&their_addr;
 		//memcpy(nextSlaveIP, &temp->sin_addr.s_addr, 4);
@@ -243,12 +235,12 @@ int main(int argc, char *argv[]) {
 		responseToString(&buf[0], response);
 		buf[10] = '\0';
 
-		printf("sending: ");
+		/*printf("sending: ");
 		i = 0;
 		while(buf[i] != '\0') {
 			printf("%x ", buf[i++]);
 		}
-		printf("\n");
+		printf("\n");*/
 
 		if (send(new_fd, buf, 10, 0) == -1) {
 			perror("send");
@@ -276,7 +268,6 @@ void stringToRequest(char str[], struct JoinRequest request) {
 
 void responseToString(char *str, struct JoinResponse response) {
 	response.magicNum = htonl(response.magicNum);
-	printf("response.nextSlaveIP: %x\n", htonl(response.nextSlaveIP));
 	response.groupID = 7;
 	memcpy(str + 0, &response.groupID, 1);
 	memcpy(str + 1, &response.magicNum, 4);
